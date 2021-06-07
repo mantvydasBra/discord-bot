@@ -15,6 +15,7 @@ class AdminCog(commands.Cog, name = "Admin"):
 
     def __init__(self, bot):
         self.bot = bot
+        self.tasks = []
 
     # Can add words or sentences into a black list, which the bot monitors and deletes.
     @commands.command(name = "black_list_words", help = "If you want for me to delete specific words, you can view and add them here.")
@@ -65,39 +66,54 @@ class AdminCog(commands.Cog, name = "Admin"):
 
     @commands.command(name = "mute", help = "I will keep that chad muted for specified reason and amount of time (seconds).", pass_context = True)
     @commands.has_permissions(kick_members = True)
-    async def mute(self, ctx, users: Greedy[Member], time: typing.Optional[int], *, reason: str = None):
+    async def mute(self, ctx, user: Member, time: typing.Optional[int], *, reason: str = None):
         # Check if the author isn't the bot it self.
         if ctx.author == self:
             return
-        elif not users:
+        elif not user:
             await ctx.send("JAJAJAJ you need to specify who to mute!")
             return
         mute_role = ctx.guild.get_role(849722695066976276)
         
-        for user in users:
-            if mute_role in user.roles:
-                await user.remove_roles(mute_role, reason = "Well, I guess everyone gets better... You can speak freely!")
-                await ctx.send(f"Well, I guess everyone gets better... You can speak freely {user.mention}!")
-                return
-            
-            if self == user:
-                await ctx.send("Shut yo bitch ass up! I'm more powerful than you and you cannot mute me!")
-                continue
-            else:
-                try:
-                    await user.add_roles(mute_role, reason = reason)
-                except Exception as e:
-                    print(e)
-                await ctx.send(f"{user.mention} has been muted by {ctx.author.mention} for: *{reason}*")
+        if mute_role in user.roles:
+            # Checks if user already has muted role
+            # Maybe do unmute in future?
+            await user.remove_roles(mute_role, reason = "Well, I guess everyone gets better... You can speak freely!")
+            await ctx.send(f"Well, I guess everyone gets better... You can speak freely {user.mention}!")
+            try:
+                for task in self.tasks:
+                    if str(user) == task.get_name():
+                        task.cancel()                    
+            except Exception as ex:
+                print(ex)
+            return
+        elif self == user:
+            await ctx.send("Shut yo bitch ass up! I'm more powerful than you and you cannot mute me!")
+        else:
+            try:
+                await user.add_roles(mute_role, reason = reason)
+            except Exception as e:
+                print(e)
+            await ctx.send(f"{user.mention} has been muted by {ctx.author.mention} for: *{reason}*")
 
-        if time > 0:
-            await asyncio.sleep(time)
-            for user in users:
-                try:
-                    await user.remove_roles(mute_role, reason = "That's all for today, you are free to go!")
-                    await ctx.send(f"That's all for today, you are free to go {user.mention}!")
-                except Exception as e:
-                    print(e)
+        self.tasks.append(asyncio.create_task(timeout(time, user, mute_role, ctx), name = str(user)))
+        lll = asyncio.gather(*self.tasks, return_exceptions = True)
+        try:
+            for task in self.tasks:
+                print(task.get_name())
+        except Exception as ex:
+            print(ex)
+        # print(asyncio.Task.print_stack)
+        # asyncio.Task.print_stack
+        # [*map(asyncio.Task.print_stack, asyncio.Task.all_tasks())]
+        # if time > 0:
+        #     await asyncio.sleep(time)
+        #     for user in users:
+        #         try:
+        #             await user.remove_roles(mute_role, reason = "That's all for today, you are free to go!")
+        #             await ctx.send(f"That's all for today, you are free to go {user.mention}!")
+        #         except Exception as e:
+        #             print(e)
                 
         
 
@@ -152,7 +168,7 @@ class AdminCog(commands.Cog, name = "Admin"):
             return 
 
         try:
-            found = chk_extension(extension)
+            found = chk_extension(self, extension)
         except Exception as e:
             print(e)
         if not found:
@@ -166,7 +182,7 @@ class AdminCog(commands.Cog, name = "Admin"):
             ctx.send(e)
 
     
-async def chk_extension(extension) -> bool:
+async def chk_extension(bot, extension) -> bool:
     check = False
     for extensions in bot.cogs:
         if (extension == extensions.lower()):
@@ -174,6 +190,14 @@ async def chk_extension(extension) -> bool:
             break
     return check
 
+async def timeout(time, user, mute_role, ctx):
+    if time > 0:
+            await asyncio.sleep(time)
+            try:
+                await user.remove_roles(mute_role, reason = "That's all for today, you are free to go!")
+                await ctx.send(f"That's all for today, you are free to go {user.mention}!")
+            except Exception as e:
+                print(e)
 
 def setup(bot):
     bot.add_cog(AdminCog(bot))
